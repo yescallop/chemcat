@@ -1,0 +1,9 @@
+[package]
+name = "chemcat"
+version = "0.1.0"
+authors = ["Scallop Ye <yescallop@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+chumsky = "0.7"
+# ariadne = "0.1"
