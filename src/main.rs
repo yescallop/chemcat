@@ -1,3 +1,4 @@
+use chemcat::Solution;
 use chumsky::prelude::*;
 use std::{
     collections::HashMap,
@@ -7,24 +8,25 @@ use std::{
 
 fn main() {
     let mut buf = String::new();
+    let eq_parser = eq_parser();
     loop {
-        println!("Nya! Feed me an equation:");
+        println!("----- CHEMCAT -----\nNya! Feed me an equation:");
         io::stdin()
             .read_line(&mut buf)
             .expect("failed to read line");
 
-        let eq = parser().parse(buf.trim_end());
+        let eq = eq_parser.parse(buf.trim());
         match eq {
             Ok(eq) => try_balance(eq),
-            Err(e) => println!("Error: {:?}", e),
+            Err(e) => println!("Error: {:?}\n", e),
         }
 
         buf.clear();
     }
 }
 
-fn try_balance(eq: ChemEq) {
-    println!("\nInput interpretation: {}", eq);
+fn try_balance(mut eq: ChemEq) {
+    println!("\nInput interpretation:\n{}", eq);
 
     let term_cnt = eq.terms.len();
     let mut eq_per_elem = HashMap::<&str, Vec<i32>>::new();
@@ -44,9 +46,39 @@ fn try_balance(eq: ChemEq) {
 
     println!("\n----- BUILDING MATRIX -----");
 
-    let matrix: Vec<_> = eq_per_elem.into_values().collect();
+    let mut matrix: Vec<_> = eq_per_elem.into_values().collect();
     for row in &matrix {
         println!("{:?}", row);
+    }
+
+    println!("\n----- GAUSSIAN ELIMINATION -----");
+
+    // In Gauss we trust.
+    chemcat::row_reduce(&mut matrix);
+    for row in &matrix {
+        println!("{:?}", row);
+    }
+
+    println!("\n----- BALANCING -----");
+
+    let sol = chemcat::solve(matrix);
+    match sol {
+        Solution::None => println!("Nya? This equation has no solution!"),
+        Solution::Unique(sol) => {
+            eq.terms
+                .iter_mut()
+                .zip(sol.into_iter())
+                .for_each(|(term, coef)| match term {
+                    Term::List(_, n) => *n = coef,
+                    _ => unreachable!(),
+                });
+            println!("Yay! Here's the solution:\n{}", eq);
+        }
+        Solution::Infinite(n) => println!(
+            "(UwU) Way too complex for Chemcat!\n\
+            It's a linear combination of {} independent solutions.",
+            n
+        ),
     }
 
     println!();
@@ -151,7 +183,7 @@ impl fmt::Display for Term {
     }
 }
 
-fn parser() -> impl Parser<char, ChemEq, Error = Simple<char>> {
+fn eq_parser() -> impl Parser<char, ChemEq, Error = Simple<char>> {
     let coef = text::int(10)
         .try_map(|s: String, span| match s.parse::<u32>() {
             Ok(0) => Err(Simple::custom(span, "zero coefficient")),
@@ -176,18 +208,25 @@ fn parser() -> impl Parser<char, ChemEq, Error = Simple<char>> {
             .clone()
             .delimited_by('(', ')')
             .or(content.delimited_by('[', ']'))
-            .then(coef)
+            .then(coef.clone())
             .map(|(list, n)| Term::List(list, n))
             .or(elem.clone())
     });
 
-    let term = elem
-        .or(delimited_list)
-        .repeated()
-        .at_least(1)
-        .map(|list| Term::List(list, 1));
+    let term_one = elem.or(delimited_list).repeated().at_least(1);
 
-    let side = term.separated_by(just('+').padded());
+    let separator = one_of("·.*");
+
+    let term = coef
+        .clone()
+        .ignore_then(term_one.clone())
+        .then(separator.ignore_then(coef.then(term_one)).repeated())
+        .map(|(mut head, rest)| {
+            head.extend(rest.into_iter().map(|(n, list)| Term::List(list, n)));
+            Term::List(head, 1)
+        });
+
+    let side = term.separated_by(just('+').padded()).at_least(1);
 
     let yields = choice((
         just('=').repeated().at_least(1).ignored(),
@@ -200,7 +239,7 @@ fn parser() -> impl Parser<char, ChemEq, Error = Simple<char>> {
         .then(side)
         .map(|(mut left, right)| {
             let left_len = left.len();
-            left.extend(right.into_iter());
+            left.extend(right);
             ChemEq {
                 terms: left,
                 left_len,
