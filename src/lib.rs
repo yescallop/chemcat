@@ -4,24 +4,20 @@ pub fn row_reduce(mat: &mut Vec<Vec<i32>>) {
 
     for i in 0..w.min(h) {
         // Locate a pivot with the least absolute value.
-        let mut min = (0, u32::MAX);
-        for j in i..h {
-            let cur = mat[j][i];
-            if cur == 0 {
-                continue;
-            }
-            let cur_abs = cur.abs() as u32;
-            if cur_abs < min.1 {
-                min = (j, cur_abs);
-            }
-        }
+        let pivot = mat
+            .iter()
+            .map(|row| row[i])
+            .enumerate()
+            .skip(i)
+            .filter(|(_, n)| *n != 0)
+            .min_by_key(|(_, n)| n.abs());
 
-        if min.1 == u32::MAX {
-            break;
-        }
+        let (pivot_i, pivot) = match pivot {
+            Some(p) => p,
+            None => break, // All zero.
+        };
 
-        mat.swap(i, min.0);
-        let pivot = mat[i][i];
+        mat.swap(i, pivot_i);
         let (pivot_row, rest) = mat[i..].split_first_mut().unwrap();
 
         for cur_row in rest {
@@ -68,11 +64,11 @@ pub fn solve(mut mat: Vec<Vec<i32>>) -> Solution {
             mat.truncate(nonzero_rows);
             Solution::Unique(solve_unique(mat))
         }
-        n => Solution::Infinite(n as u32),
+        n => Solution::Infinite(n),
     }
 }
 
-fn solve_unique(mat: Vec<Vec<i32>>) -> Vec<u32> {
+fn solve_unique(mat: Vec<Vec<i32>>) -> Vec<i32> {
     let h = mat.len();
     let mut sol = vec![0; h + 1];
     sol[h] = 1;
@@ -81,13 +77,21 @@ fn solve_unique(mat: Vec<Vec<i32>>) -> Vec<u32> {
         let sum: i32 = mat[i][i + 1..]
             .iter()
             .zip(sol[i + 1..].iter())
-            .map(|(&a, &b)| a * b as i32)
+            .map(|(&a, &b)| a * b)
             .sum();
         let pivot = mat[i][i];
 
         let gcd = gcd(sum, pivot);
-        let sum_m = (pivot / gcd).abs() as u32;
-        let pivot_m = (sum / gcd).abs() as u32;
+        let mut sum_m = pivot / gcd;
+        let mut pivot_m = sum / gcd;
+
+        if sum_m < 0 {
+            sum_m = -sum_m;
+        } else if sum_m == 0 {
+            pivot_m = pivot_m.abs();
+        } else {
+            pivot_m = -pivot_m;
+        }
 
         sol[i + 1..].iter_mut().for_each(|n| *n *= sum_m);
         sol[i] = pivot_m;
@@ -98,6 +102,6 @@ fn solve_unique(mat: Vec<Vec<i32>>) -> Vec<u32> {
 
 pub enum Solution {
     None,
-    Unique(Vec<u32>),
-    Infinite(u32),
+    Unique(Vec<i32>),
+    Infinite(usize),
 }

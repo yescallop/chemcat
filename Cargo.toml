@@ -6,4 +6,8 @@ edition = "2021"
 
 [dependencies]
 chumsky = "0.7"
+owo-colors = "3.2"
 # ariadne = "0.1"
+
+[profile.release]
+overflow-checks = true
