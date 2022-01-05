@@ -1,107 +1,70 @@
-pub fn row_reduce(mat: &mut Vec<Vec<i32>>) {
-    let w = mat[0].len();
-    let h = mat.len();
+mod fmt;
+pub mod lin_alg;
 
-    for i in 0..w.min(h) {
-        // Locate a pivot with the least absolute value.
-        let pivot = mat
-            .iter()
-            .map(|row| row[i])
-            .enumerate()
-            .skip(i)
-            .filter(|(_, n)| *n != 0)
-            .min_by_key(|(_, n)| n.abs());
+use std::collections::HashMap;
 
-        let (pivot_i, pivot) = match pivot {
-            Some(p) => p,
-            None => break, // All zero.
-        };
+#[derive(Debug)]
+pub struct ChemEq {
+    pub terms: Vec<Term>,
+    pub left_len: usize,
+}
 
-        mat.swap(i, pivot_i);
-        let (pivot_row, rest) = mat[i..].split_first_mut().unwrap();
+impl ChemEq {
+    pub fn set_coefs(&mut self, coefs: &[i32]) -> bool {
+        let mut ill_coef = false;
+        self.terms
+            .iter_mut()
+            .zip(coefs.iter())
+            .for_each(|(term, &coef)| match term {
+                Term::List { n, .. } => {
+                    *n = coef;
+                    if coef <= 0 {
+                        ill_coef = true;
+                    }
+                }
+                _ => unreachable!(),
+            });
+        ill_coef
+    }
+}
 
-        for cur_row in rest {
-            let cur = cur_row[i];
-            if cur == 0 {
-                continue;
+#[derive(Debug)]
+pub enum Term {
+    Elem {
+        name: String,
+        n: i32,
+    },
+    Electron,
+    List {
+        list: Vec<Term>,
+        n: i32,
+        charge: i32,
+    },
+}
+
+impl Term {
+    const CHARGE_NAME: &'static str = "c";
+
+    pub fn collapse<'a>(&'a self, map: &mut HashMap<&'a str, i32>, m: i32) {
+        match self {
+            Term::Elem { name, n } => {
+                let cnt = map.entry(name).or_insert(0);
+                *cnt += m * n;
             }
-
-            let gcd = gcd(cur, pivot);
-            let cur_m = pivot / gcd;
-            let pivot_m = cur / gcd;
-
-            mul_sub(cur_row, cur_m, pivot_row, pivot_m);
+            Term::List { list, n, charge } => {
+                list.iter().for_each(|term| term.collapse(map, m * n));
+                if *charge != 0 {
+                    let cnt = map.entry(Term::CHARGE_NAME).or_insert(0);
+                    *cnt += m * charge;
+                }
+            }
+            Term::Electron => {}
         }
     }
-}
-
-fn mul_sub(dest: &mut [i32], dest_m: i32, src: &[i32], src_m: i32) {
-    dest.iter_mut().zip(src.iter()).for_each(|(dest, src)| {
-        *dest = *dest * dest_m - *src * src_m;
-    })
-}
-
-fn gcd(mut a: i32, mut b: i32) -> i32 {
-    while b != 0 {
-        let t = b;
-        b = a % b;
-        a = t;
-    }
-    a
-}
-
-pub fn solve(mut mat: Vec<Vec<i32>>) -> Solution {
-    let zero_rows = mat
-        .iter()
-        .rev()
-        .take_while(|row| row.iter().all(|cur| *cur == 0))
-        .count();
-    let nonzero_rows = mat.len() - zero_rows;
-    let unknowns = mat[0].len();
-    match unknowns - nonzero_rows {
-        0 => Solution::None,
-        1 => {
-            mat.truncate(nonzero_rows);
-            Solution::Unique(solve_unique(mat))
-        }
-        n => Solution::Infinite(n),
-    }
-}
-
-fn solve_unique(mat: Vec<Vec<i32>>) -> Vec<i32> {
-    let h = mat.len();
-    let mut sol = vec![0; h + 1];
-    sol[h] = 1;
-
-    for i in (0..h).rev() {
-        let sum: i32 = mat[i][i + 1..]
-            .iter()
-            .zip(sol[i + 1..].iter())
-            .map(|(&a, &b)| a * b)
-            .sum();
-        let pivot = mat[i][i];
-
-        let gcd = gcd(sum, pivot);
-        let mut sum_m = pivot / gcd;
-        let mut pivot_m = sum / gcd;
-
-        if sum_m < 0 {
-            sum_m = -sum_m;
-        } else if sum_m == 0 {
-            pivot_m = pivot_m.abs();
-        } else {
-            pivot_m = -pivot_m;
-        }
-
-        sol[i + 1..].iter_mut().for_each(|n| *n *= sum_m);
-        sol[i] = pivot_m;
-    }
-
-    sol
 }
 
 pub enum Solution {
     None,
     Unique(Vec<i32>),
-    Infinite(usize),
+    Infinite(Vec<Vec<i32>>),
 }

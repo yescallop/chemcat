@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 chumsky = "0.7"
+gcd = "2.1"
 owo-colors = "3.2"
 # ariadne = "0.1"
 
