@@ -18,36 +18,47 @@ impl Display for ChemEq {
 
 impl Display for Term {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        fmt_term(self, f, false)
+        fmt_term(self, f, true)
     }
 }
 
-fn fmt_term(term: &Term, f: &mut Formatter<'_>, delimited: bool) -> Result {
+/// Formats a term within a chemical equation recursively.
+///
+/// This function generally parenthesizes the lists, formats the coefficients
+/// as subscripts and the charges as superscripts.
+///
+/// The parameter `outermost` specifies that the term is an outermost list, dropping the
+/// parentheses around it and formatting its coefficient as preceding ASCII numbers instead.
+fn fmt_term(term: &Term, f: &mut Formatter<'_>, outermost: bool) -> Result {
     const SUPER_PLUS: u32 = 0x207A;
     // const SUPER_MINUS: u32 = 0x207B;
 
-    match term {
-        Term::Elem { name, n } => {
+    match *term {
+        Term::Elem { ref name, n } => {
             f.write_str(name)?;
-            fmt_coef(*n, f, Some(true))?;
+            fmt_coef(n, f, Some(true))?;
         }
-        Term::List { list, n, charge } => {
-            if delimited {
+        Term::List {
+            ref list,
+            n,
+            charge,
+        } => {
+            if outermost {
+                fmt_coef(n, f, None)?;
+                for term in list {
+                    fmt_term(term, f, false)?;
+                }
+            } else {
                 f.write_char('(')?;
                 for term in list {
-                    fmt_term(term, f, true)?;
+                    fmt_term(term, f, false)?;
                 }
                 f.write_char(')')?;
-                fmt_coef(*n, f, Some(true))?;
-            } else {
-                fmt_coef(*n, f, None)?;
-                for term in list {
-                    fmt_term(term, f, true)?;
-                }
+                fmt_coef(n, f, Some(true))?;
             }
-            if *charge != 0 {
-                let neg = *charge < 0;
-                fmt_coef(charge.abs(), f, Some(false))?;
+            if charge != 0 {
+                let neg = charge < 0;
+                fmt_coef(charge.wrapping_abs(), f, Some(false))?;
                 f.write_char(char::from_u32(SUPER_PLUS + neg as u32).unwrap())?;
             }
         }
@@ -56,8 +67,17 @@ fn fmt_term(term: &Term, f: &mut Formatter<'_>, delimited: bool) -> Result {
     Ok(())
 }
 
-// None for no script, Some(true) for subscript, Some(false) for superscript.
-fn fmt_coef(mut n: i32, f: &mut Formatter<'_>, script: Option<bool>) -> Result {
+/// Formats a coefficient in decimal as ASCII numbers, subscripts, or superscripts.
+///
+/// The parameter `script` accepts values `None` for ASCII numbers,
+/// `Some(true)` for subscripts, and `Some(false)` for superscripts.
+///
+/// The coefficients of 1 are dropped by default and can only be kept for ASCII
+/// numbers by specifying the "#" flag in the formatter.
+///
+/// Non-positive coefficients are only allowed for ASCII numbers and are wrapped to
+/// be unsigned for subscripts and superscripts.
+fn fmt_coef(n: i32, f: &mut Formatter<'_>, script: Option<bool>) -> Result {
     const SUB_START: u16 = 0x2080;
     const SUPER_TABLE: [u16; 10] = [
         0x2070, 0xB9, 0xB2, 0xB3, 0x2074, 0x2075, 0x2076, 0x2077, 0x2078, 0x2079,
@@ -75,6 +95,8 @@ fn fmt_coef(mut n: i32, f: &mut Formatter<'_>, script: Option<bool>) -> Result {
             }
         }
         Some(sub) => {
+            let mut n = n as u32;
+
             let mut buf = [0u16; 10];
             let mut i = buf.len() - 1;
             loop {

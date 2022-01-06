@@ -1,7 +1,6 @@
-use crate::Solution;
 use gcd::Gcd;
 
-/// Reduces a matrix by row and returns its rank.
+/// Transforms a matrix into row echelon form by Gaussian elimination and returns its rank.
 pub fn row_reduce(mat: &mut Vec<Vec<i32>>) -> usize {
     let row_n = mat.len();
     let col_n = mat[0].len();
@@ -17,7 +16,7 @@ pub fn row_reduce(mat: &mut Vec<Vec<i32>>) -> usize {
             .enumerate()
             .skip(row_i)
             .filter(|(_, n)| *n != 0)
-            .min_by_key(|(_, n)| n.abs());
+            .min_by_key(|(_, n)| n.unsigned_abs());
 
         let (prev_pivot_i, pivot) = match pivot {
             Some(p) => p,
@@ -48,10 +47,13 @@ pub fn row_reduce(mat: &mut Vec<Vec<i32>>) -> usize {
     row_i
 }
 
+/// Returns the positive GCD of two signed integers.
 fn gcd(u: i32, v: i32) -> i32 {
     u.unsigned_abs().gcd(v.unsigned_abs()) as i32
 }
 
+/// Returns the multipliers that, when multiplied by the
+/// corresponding integer, give the LCM of two integers.
 fn lcm_div(a: i32, b: i32) -> (i32, i32) {
     let gcd = gcd(a, b);
     (b / gcd, a / gcd)
@@ -63,12 +65,13 @@ fn row_mul_sub(dest: &mut [i32], dest_m: i32, src: &[i32], src_m: i32) {
     })
 }
 
-pub fn solve(mat: Vec<Vec<i32>>, rank: usize) -> Solution {
+/// Solves the null space of a matrix in row echelon form and returns one possible basis.
+pub fn solve(mat: Vec<Vec<i32>>, rank: usize) -> Vec<Vec<i32>> {
     let col_n = mat[0].len();
     match col_n - rank {
-        0 => Solution::None,
-        1 => Solution::Unique(solve_unique(mat, rank)),
-        _ => Solution::Infinite(solve_infinite(mat, rank)),
+        0 => vec![],
+        1 => vec![solve_unique(mat, rank)],
+        _ => solve_multiple(mat, rank),
     }
 }
 
@@ -86,27 +89,41 @@ fn solve_unique(mat: Vec<Vec<i32>>, rank: usize) -> Vec<i32> {
 
         let (mut sum_m, mut pivot_m) = lcm_div(sum, pivot);
 
-        if pivot_m < 0 {
-            pivot_m = -pivot_m;
-        } else {
+        if sum_m < 0 {
             sum_m = -sum_m;
+        } else {
+            pivot_m = -pivot_m;
         }
 
         sol[i + 1..].iter_mut().for_each(|n| *n *= sum_m);
         sol[i] = pivot_m;
     }
 
+    normalize_sol(&mut sol);
     sol
 }
 
-fn solve_infinite(mut mat: Vec<Vec<i32>>, rank: usize) -> Vec<Vec<i32>> {
+/// Normalizes a solution, so that the number of positive coefficients
+/// are greater than that of negative ones or, if the numbers are equal,
+/// the first nonzero coefficient is positive.
+fn normalize_sol(sol: &mut [i32]) {
+    let mut neg: i32 = sol.iter().map(|n| n.signum()).sum();
+    if neg == 0 {
+        neg = sol.iter().copied().find(|n| *n != 0).unwrap();
+    }
+    if neg < 0 {
+        sol.iter_mut().for_each(|n| *n = -*n);
+    }
+}
+
+fn solve_multiple(mut mat: Vec<Vec<i32>>, rank: usize) -> Vec<Vec<i32>> {
     let col_n = mat[0].len();
     let nullity = col_n - rank;
 
     row_augment_identity(&mut mat, rank);
     col_reduce_upper(&mut mat, rank);
 
-    // Transpose and move the basis up, without extra allocation.
+    // Transpose and move the basis to the top, without extra allocation.
     for i in 0..col_n.min(nullity) {
         // Move the outermost row and column at a time, so that
         // no vector is overwritten before they are moved.
@@ -119,30 +136,32 @@ fn solve_infinite(mut mat: Vec<Vec<i32>>, rank: usize) -> Vec<Vec<i32>> {
     }
 
     mat.truncate(nullity);
-    for row in &mut mat {
-        let gcd = row.iter().copied().reduce(gcd).unwrap();
-        if gcd != 1 {
-            row.iter_mut().for_each(|n| *n /= gcd);
-        }
+    for sol in &mut mat {
+        normalize_sol(sol);
+        simplify_sol(sol);
     }
     mat
 }
 
+/// Divides the GCD from a solution.
+fn simplify_sol(sol: &mut [i32]) {
+    let gcd = sol.iter().copied().reduce(gcd).unwrap();
+    if gcd != 1 {
+        sol.iter_mut().for_each(|n| *n /= gcd);
+    }
+}
+
 fn row_augment_identity(mat: &mut Vec<Vec<i32>>, rank: usize) {
-    // Reuse zero rows.
+    let row_n = mat.len();
     let col_n = mat[0].len();
+
+    mat.extend((row_n - rank..col_n).map(|_| vec![0; col_n]));
+
     mat[rank..]
         .iter_mut()
         .take(col_n)
         .enumerate()
         .for_each(|(i, row)| row[i] = 1);
-
-    let row_n = mat.len();
-    mat.extend((row_n - rank..col_n).map(|i| {
-        let mut row = vec![0; col_n];
-        row[i] = 1;
-        row
-    }));
 }
 
 fn col_reduce_upper(mat: &mut Vec<Vec<i32>>, upper_rank: usize) {

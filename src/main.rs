@@ -1,7 +1,7 @@
 use chemcat::*;
 use chumsky::prelude::*;
 use owo_colors::OwoColorize;
-use std::{collections::HashMap, io, str};
+use std::io;
 
 fn main() {
     let mut buf = String::new();
@@ -27,45 +27,28 @@ fn main() {
 fn try_balance(mut eq: ChemEq) {
     println!("\nInput interpretation:\n{}", eq);
 
-    let term_cnt = eq.terms.len();
-    let mut coef_per_elem = HashMap::<&str, i32>::new();
-    let mut eq_per_elem = HashMap::<&str, Vec<i32>>::new();
-
-    println!("\n----- COLLAPSING TERMS -----");
-
-    for (i, term) in eq.terms.iter().enumerate() {
-        term.collapse(&mut coef_per_elem, 1);
-        println!("{} -> {:?}", term, coef_per_elem);
-
-        let left = i < eq.left_len;
-        for (elem, n) in coef_per_elem.drain() {
-            let row = eq_per_elem.entry(elem).or_insert_with(|| vec![0; term_cnt]);
-            row[i] = if left { n } else { -n };
-        }
-    }
-
     println!("\n----- BUILDING MATRIX -----");
 
-    let mut matrix: Vec<_> = eq_per_elem.into_values().collect();
-    for row in &matrix {
+    let mut mat = eq.build_matrix();
+    for row in &mat {
         println!("{:?}", row);
     }
 
     println!("\n----- GAUSSIAN ELIMINATION -----");
 
-    // In Gauss we trust.
-    let rank = lin_alg::row_reduce(&mut matrix);
-    for row in &matrix {
+    let rank = lin_alg::row_reduce(&mut mat);
+    for row in &mat {
         println!("{:?}", row);
     }
 
-    println!("\n----- SOLVING -----");
+    println!("\n----- SOLVING NULL SPACE -----");
 
-    let sol = lin_alg::solve(matrix, rank);
-    match sol {
-        Solution::None => println!("(;w;) This equation has no solution!"),
-        Solution::Unique(sol) => {
-            let ill_coef = eq.set_coefs(&sol);
+    let basis = lin_alg::solve(mat, rank);
+    match basis.len() {
+        0 => println!("(;w;) This equation has no solution!"),
+        1 => {
+            let sol = &basis[0];
+            let ill_coef = eq.set_coefs(sol);
 
             // The `#` flag keeps preceding coefficients of 1.
             // FIXME: Let users choose whether to keep them or not.
@@ -83,12 +66,12 @@ fn try_balance(mut eq: ChemEq) {
                 );
             }
         }
-        Solution::Infinite(basis) => {
+        n => {
             println!(
                 "(OwO) Way too complex for Chemcat!\n\
                 It's a linear combination of {} independent solutions.\n\
                 Here's one possible basis:\n",
-                basis.len().green().bold()
+                n.green().bold()
             );
             for row in &basis {
                 eq.set_coefs(row);
@@ -156,12 +139,8 @@ fn eq_parser() -> impl Parser<char, ChemEq, Error = Simple<char>> {
             head
         })
         .then(charge)
-        .map(|(list, charge)| Term::List { list, n: 1, charge })
-        .or(just("e(-)").map(|_| Term::List {
-            list: vec![Term::Electron],
-            n: 1,
-            charge: -1,
-        }));
+        .or(just("e(-)").map(|_| (vec![Term::Electron], -1)))
+        .map(|(list, charge)| Term::List { list, n: 1, charge });
 
     let term = coef.ignore_then(term_without_coef);
 
