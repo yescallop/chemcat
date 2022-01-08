@@ -105,14 +105,16 @@ fn solve_unique(mat: Vec<Vec<i32>>, rank: usize) -> Vec<i32> {
 }
 
 /// Normalizes a solution, with simplification if needed.
-/// 
+///
 /// A normalized solution is one where the number of positive coefficients
 /// is greater than that of negative ones or, if the numbers are equal,
 /// the first nonzero coefficient is positive.
 fn normalize_sol(sol: &mut [i32], simplify: bool) {
     if simplify {
         let gcd = sol.iter().copied().reduce(gcd).unwrap();
-        sol.iter_mut().for_each(|n| *n /= gcd);
+        if gcd != 1 {
+            sol.iter_mut().for_each(|n| *n /= gcd);
+        }
     }
 
     let neg = match sol.iter().map(|n| n.signum()).sum() {
@@ -155,10 +157,10 @@ fn row_augment_identity(mat: &mut Vec<Vec<i32>>, rank: usize) {
     let col_n = mat[0].len();
 
     mat.extend((row_n - rank..col_n).map(|_| vec![0; col_n]));
+    mat.truncate(rank + col_n);
 
     mat[rank..]
         .iter_mut()
-        .take(col_n)
         .enumerate()
         .for_each(|(i, row)| row[i] = 1);
 }
