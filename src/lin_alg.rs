@@ -99,18 +99,26 @@ fn solve_unique(mat: Vec<Vec<i32>>, rank: usize) -> Vec<i32> {
         sol[i] = pivot_m;
     }
 
-    normalize_sol(&mut sol);
+    // Already simplified.
+    normalize_sol(&mut sol, false);
     sol
 }
 
-/// Normalizes a solution, so that the number of positive coefficients
-/// are greater than that of negative ones or, if the numbers are equal,
+/// Normalizes a solution, with simplification if needed.
+/// 
+/// A normalized solution is one where the number of positive coefficients
+/// is greater than that of negative ones or, if the numbers are equal,
 /// the first nonzero coefficient is positive.
-fn normalize_sol(sol: &mut [i32]) {
-    let mut neg: i32 = sol.iter().map(|n| n.signum()).sum();
-    if neg == 0 {
-        neg = sol.iter().copied().find(|n| *n != 0).unwrap();
+fn normalize_sol(sol: &mut [i32], simplify: bool) {
+    if simplify {
+        let gcd = sol.iter().copied().reduce(gcd).unwrap();
+        sol.iter_mut().for_each(|n| *n /= gcd);
     }
+
+    let neg = match sol.iter().map(|n| n.signum()).sum() {
+        0 => sol.iter().copied().find(|&n| n != 0).unwrap(),
+        sum => sum,
+    };
     if neg < 0 {
         sol.iter_mut().for_each(|n| *n = -*n);
     }
@@ -137,18 +145,9 @@ fn solve_multiple(mut mat: Vec<Vec<i32>>, rank: usize) -> Vec<Vec<i32>> {
 
     mat.truncate(nullity);
     for sol in &mut mat {
-        normalize_sol(sol);
-        simplify_sol(sol);
+        normalize_sol(sol, true);
     }
     mat
-}
-
-/// Divides the GCD from a solution.
-fn simplify_sol(sol: &mut [i32]) {
-    let gcd = sol.iter().copied().reduce(gcd).unwrap();
-    if gcd != 1 {
-        sol.iter_mut().for_each(|n| *n /= gcd);
-    }
 }
 
 fn row_augment_identity(mat: &mut Vec<Vec<i32>>, rank: usize) {

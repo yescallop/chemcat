@@ -30,8 +30,8 @@ impl Display for Term {
 /// The parameter `outermost` specifies that the term is an outermost list, dropping the
 /// parentheses around it and formatting its coefficient as preceding ASCII numbers instead.
 fn fmt_term(term: &Term, f: &mut Formatter<'_>, outermost: bool) -> Result {
-    const SUPER_PLUS: u32 = 0x207A;
-    // const SUPER_MINUS: u32 = 0x207B;
+    const SUPERSCRIPT_PLUS: u32 = 0x207A;
+    // const SUPERSCRIPT_MINUS: u32 = 0x207B;
 
     match *term {
         Term::Elem { ref name, n } => {
@@ -59,7 +59,7 @@ fn fmt_term(term: &Term, f: &mut Formatter<'_>, outermost: bool) -> Result {
             if charge != 0 {
                 let neg = charge < 0;
                 fmt_coef(charge.wrapping_abs(), f, Some(false))?;
-                f.write_char(char::from_u32(SUPER_PLUS + neg as u32).unwrap())?;
+                f.write_char(char::from_u32(SUPERSCRIPT_PLUS + neg as u32).unwrap())?;
             }
         }
         Term::Electron => f.write_char('e')?,
@@ -78,8 +78,8 @@ fn fmt_term(term: &Term, f: &mut Formatter<'_>, outermost: bool) -> Result {
 /// Non-positive coefficients are only allowed for ASCII numbers and are wrapped to
 /// be unsigned for subscripts and superscripts.
 fn fmt_coef(n: i32, f: &mut Formatter<'_>, script: Option<bool>) -> Result {
-    const SUB_START: u16 = 0x2080;
-    const SUPER_TABLE: [u16; 10] = [
+    const SUBSCRIPT_ZERO: u16 = 0x2080;
+    const SUPERSCRIPT_TABLE: [u16; 10] = [
         0x2070, 0xB9, 0xB2, 0xB3, 0x2074, 0x2075, 0x2076, 0x2077, 0x2078, 0x2079,
     ];
 
@@ -101,9 +101,9 @@ fn fmt_coef(n: i32, f: &mut Formatter<'_>, script: Option<bool>) -> Result {
             let mut i = buf.len() - 1;
             loop {
                 buf[i] = if sub {
-                    SUB_START + (n % 10) as u16
+                    SUBSCRIPT_ZERO + (n % 10) as u16
                 } else {
-                    SUPER_TABLE[(n % 10) as usize]
+                    SUPERSCRIPT_TABLE[(n % 10) as usize]
                 };
                 n /= 10;
                 if n == 0 {
