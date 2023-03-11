@@ -1,9 +1,21 @@
 use chemcat::*;
 use chumsky::prelude::*;
 use owo_colors::OwoColorize;
-use std::io;
+use std::{io, thread};
 
 fn main() {
+    let thread = thread::current();
+
+    ctrlc::set_handler(move || {
+        thread.unpark();
+    })
+    .expect("Error setting Ctrl-C handler");
+
+    thread::spawn(run);
+    thread::park();
+}
+
+fn run() {
     let mut buf = String::new();
     let eq_parser = eq_parser();
     loop {
@@ -11,7 +23,6 @@ fn main() {
         io::stdin()
             .read_line(&mut buf)
             .expect("failed to read line");
-        // TODO: Elegant exit.
 
         let eq = eq_parser.parse(buf.trim());
         match eq {
@@ -106,8 +117,8 @@ fn eq_parser() -> impl Parser<char, ChemEq, Error = Simple<char>> {
 
         list_content
             .clone()
-            .delimited_by('(', ')')
-            .or(list_content.delimited_by('[', ']'))
+            .delimited_by(just('('), just(')'))
+            .or(list_content.delimited_by(just('['), just(']')))
             .then(coef.clone())
             .map(|(list, n)| Term::List { list, n, charge: 0 })
             .or(elem)
@@ -120,7 +131,7 @@ fn eq_parser() -> impl Parser<char, ChemEq, Error = Simple<char>> {
     let charge = coef
         .clone()
         .then(just('+').to(false).or(just('-').to(true)))
-        .delimited_by('(', ')')
+        .delimited_by(just('('), just(')'))
         .map(|(n, neg)| if neg { -n } else { n })
         .or(empty().to(0));
 

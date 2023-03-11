@@ -5,9 +5,10 @@ authors = ["Scallop Ye <yescallop@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-chumsky = "0.7"
-gcd = "2.1"
-owo-colors = "3.2"
+ctrlc = "3"
+chumsky = "0.9"
+gcd = "2"
+owo-colors = "3"
 # ariadne = "0.1"
 
 [profile.release]
