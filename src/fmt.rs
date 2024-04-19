@@ -2,7 +2,7 @@ use crate::*;
 use owo_colors::OwoColorize;
 use std::fmt::*;
 
-impl Display for ChemEq {
+impl<'a> Display for ChemEq<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         for (i, term) in self.terms.iter().enumerate() {
             if i == self.left_len {
@@ -16,7 +16,7 @@ impl Display for ChemEq {
     }
 }
 
-impl Display for Term {
+impl<'a> Display for Term<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         fmt_term(self, f, true)
     }
@@ -29,12 +29,12 @@ impl Display for Term {
 ///
 /// The parameter `outermost` specifies that the term is an outermost list, dropping the
 /// parentheses around it and formatting its coefficient as preceding ASCII numbers instead.
-fn fmt_term(term: &Term, f: &mut Formatter<'_>, outermost: bool) -> Result {
+fn fmt_term(term: &Term<'_>, f: &mut Formatter<'_>, outermost: bool) -> Result {
     const SUPERSCRIPT_PLUS: u32 = 0x207A;
     // const SUPERSCRIPT_MINUS: u32 = 0x207B;
 
     match *term {
-        Term::Elem { ref name, n } => {
+        Term::Elem { name, n } => {
             f.write_str(name)?;
             fmt_coef(n, f, Some(true))?;
         }
@@ -83,7 +83,7 @@ fn fmt_coef(n: i32, f: &mut Formatter<'_>, script: Option<bool>) -> Result {
         0x2070, 0xB9, 0xB2, 0xB3, 0x2074, 0x2075, 0x2076, 0x2077, 0x2078, 0x2079,
     ];
 
-    if n == 1 && !(script == None && f.alternate()) {
+    if n == 1 && !(script.is_none() && f.alternate()) {
         return Ok(());
     }
     match script {

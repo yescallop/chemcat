@@ -1,30 +1,21 @@
+#![warn(rust_2018_idioms)]
+
 use chemcat::*;
 use chumsky::prelude::*;
 use owo_colors::OwoColorize;
-use std::{io, thread};
+use std::{io, process};
 
 fn main() {
-    let thread = thread::current();
+    ctrlc::set_handler(|| process::exit(0)).expect("Error setting Ctrl-C handler");
 
-    ctrlc::set_handler(move || {
-        thread.unpark();
-    })
-    .expect("Error setting Ctrl-C handler");
-
-    thread::spawn(run);
-    thread::park();
-}
-
-fn run() {
     let mut buf = String::new();
-    let eq_parser = eq_parser();
     loop {
         println!("----- CHEMCAT (UwU) -----\nNya! Feed me an equation:");
         io::stdin()
             .read_line(&mut buf)
             .expect("failed to read line");
 
-        let eq = eq_parser.parse(buf.trim());
+        let eq = eq_parser().parse(buf.trim()).into_result();
         match eq {
             Ok(eq) => try_balance(eq),
             // TODO: Better error messages.
@@ -35,7 +26,7 @@ fn run() {
     }
 }
 
-fn try_balance(mut eq: ChemEq) {
+fn try_balance(mut eq: ChemEq<'_>) {
     println!("\nInput interpretation:\n{}", eq);
 
     println!("\n----- BUILDING MATRIX -----");
@@ -94,42 +85,40 @@ fn try_balance(mut eq: ChemEq) {
     println!();
 }
 
-fn eq_parser() -> impl Parser<char, ChemEq, Error = Simple<char>> {
+fn eq_parser<'a>() -> impl Parser<'a, &'a str, ChemEq<'a>, extra::Err<Rich<'a, char>>> {
     let coef = text::int(10)
-        .try_map(|s: String, span| match s.parse::<i32>() {
-            Ok(0) => Err(Simple::custom(span, "zero coefficient")),
+        .try_map(|s: &str, span| match s.parse::<i32>() {
+            Ok(0) => Err(Rich::custom(span, "zero coefficient")),
             Ok(n) => Ok(n),
-            Err(e) => Err(Simple::custom(span, e)),
+            Err(e) => Err(Rich::custom(span, e)),
         })
         .or(empty().to(1));
 
-    let elem_name = filter(char::is_ascii_uppercase)
-        .map(Some)
-        .chain::<char, _, _>(filter(char::is_ascii_lowercase).repeated())
-        .collect();
+    let elem_name = any()
+        .filter(char::is_ascii_uppercase)
+        .then(any().filter(char::is_ascii_lowercase).repeated())
+        .to_slice();
 
-    let elem = elem_name
-        .then(coef.clone())
-        .map(|(name, n)| Term::Elem { name, n });
+    let elem = elem_name.then(coef).map(|(name, n)| Term::Elem { name, n });
 
     let sub_term = recursive(|list_or_elem| {
-        let list_content = list_or_elem.repeated().at_least(1);
+        let list_content = list_or_elem.repeated().at_least(1).collect::<Vec<_>>();
 
         list_content
             .clone()
             .delimited_by(just('('), just(')'))
             .or(list_content.delimited_by(just('['), just(']')))
-            .then(coef.clone())
+            .then(coef)
             .map(|(list, n)| Term::List { list, n, charge: 0 })
             .or(elem)
     })
     .repeated()
-    .at_least(1);
+    .at_least(1)
+    .collect::<Vec<_>>();
 
     let sub_term_separator = one_of("·.*");
 
     let charge = coef
-        .clone()
         .then(just('+').to(false).or(just('-').to(true)))
         .delimited_by(just('('), just(')'))
         .map(|(n, neg)| if neg { -n } else { n })
@@ -139,8 +128,9 @@ fn eq_parser() -> impl Parser<char, ChemEq, Error = Simple<char>> {
         .clone()
         .then(
             sub_term_separator
-                .ignore_then(coef.clone().then(sub_term))
-                .repeated(),
+                .ignore_then(coef.then(sub_term))
+                .repeated()
+                .collect::<Vec<_>>(),
         )
         .map(|(mut head, rest)| {
             head.extend(
@@ -155,7 +145,10 @@ fn eq_parser() -> impl Parser<char, ChemEq, Error = Simple<char>> {
 
     let term = coef.ignore_then(term_without_coef);
 
-    let side = term.separated_by(just('+').padded()).at_least(1);
+    let side = term
+        .separated_by(just('+').padded())
+        .at_least(1)
+        .collect::<Vec<_>>();
 
     let yields = choice((
         just('=').repeated().at_least(1).ignored(),

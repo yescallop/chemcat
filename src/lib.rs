@@ -1,4 +1,5 @@
-#![warn(missing_docs)]
+#![warn(missing_docs, rust_2018_idioms)]
+
 //! Chemcat's brain (UwU).
 
 /// Formatting chemical equations and terms.
@@ -10,14 +11,14 @@ use std::collections::HashMap;
 
 /// A chemical equation.
 #[derive(Debug)]
-pub struct ChemEq {
+pub struct ChemEq<'a> {
     /// The immediate terms within the equation, starting from the left-hand side.
-    pub terms: Vec<Term>,
+    pub terms: Vec<Term<'a>>,
     /// The number of terms on the left-hand side.
     pub left_len: usize,
 }
 
-impl ChemEq {
+impl<'a> ChemEq<'a> {
     /// Sets the coefficients of this `ChemEq` and returns a boolean
     /// indicating whether they are all positive.
     ///
@@ -65,11 +66,11 @@ impl ChemEq {
 
 /// A term within a chemical equation.
 #[derive(Debug)]
-pub enum Term {
+pub enum Term<'a> {
     /// An element.
     Elem {
         /// The name.
-        name: String,
+        name: &'a str,
         /// The coefficient.
         n: i32,
     },
@@ -78,7 +79,7 @@ pub enum Term {
     /// A list of terms.
     List {
         /// The list.
-        list: Vec<Term>,
+        list: Vec<Term<'a>>,
         /// The coefficient.
         n: i32,
         /// The electric charge.
@@ -86,7 +87,7 @@ pub enum Term {
     },
 }
 
-impl Term {
+impl<'a> Term<'a> {
     /// The name of electric charge as an "element".
     pub const CHARGE_NAME: &'static str = "c";
 
@@ -95,7 +96,7 @@ impl Term {
     ///
     /// Electric charge is regarded as an "element" named [`Term::CHARGE_NAME`]
     /// (currently "c", lowercase so that it does not conflict with actual elements).
-    pub fn collapse<'a>(&'a self, map: &mut HashMap<&'a str, i32>, m: i32) {
+    pub fn collapse<'b>(&'b self, map: &mut HashMap<&'a str, i32>, m: i32) {
         match self {
             Term::Elem { name, n } => {
                 let cnt = map.entry(name).or_insert(0);

@@ -6,9 +6,9 @@ edition = "2021"
 
 [dependencies]
 ctrlc = "3"
-chumsky = "0.9"
+chumsky = "=1.0.0-alpha.7"
 gcd = "2"
-owo-colors = "3"
+owo-colors = "4"
 # ariadne = "0.1"
 
 [profile.release]

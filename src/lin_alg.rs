@@ -1,7 +1,7 @@
 use gcd::Gcd;
 
 /// Transforms a matrix into row echelon form by Gaussian elimination and returns its rank.
-pub fn row_reduce(mat: &mut Vec<Vec<i32>>) -> usize {
+pub fn row_reduce(mat: &mut [Vec<i32>]) -> usize {
     let row_n = mat.len();
     let col_n = mat[0].len();
 
@@ -18,13 +18,10 @@ pub fn row_reduce(mat: &mut Vec<Vec<i32>>) -> usize {
             .filter(|(_, n)| *n != 0)
             .min_by_key(|(_, n)| n.unsigned_abs());
 
-        let (prev_pivot_i, pivot) = match pivot {
-            Some(p) => p,
+        let Some((prev_pivot_i, pivot)) = pivot else {
             // All zero.
-            None => {
-                col_i += 1;
-                continue;
-            }
+            col_i += 1;
+            continue;
         };
 
         mat.swap(row_i, prev_pivot_i);
@@ -62,7 +59,7 @@ fn lcm_div(a: i32, b: i32) -> (i32, i32) {
 fn row_mul_sub(dest: &mut [i32], dest_m: i32, src: &[i32], src_m: i32) {
     dest.iter_mut().zip(src.iter()).for_each(|(dest, src)| {
         *dest = *dest * dest_m - *src * src_m;
-    })
+    });
 }
 
 /// Solves the null space of a matrix in row echelon form and returns one possible basis.
